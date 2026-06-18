@@ -50,7 +50,7 @@ def _clamp(v: int) -> int:
     return max(0, min(255, v))
 
 
-def matches_device_name(name: str | None) -> bool:
+def matches_device_name(name: "str | None") -> bool:
     if not name:
         return False
     lower = name.lower()

@@ -32,7 +32,7 @@ class BLEConnection:
     async def scan(self, timeout: float = 5.0) -> list[dict]:
         devices = await BleakScanner.discover(timeout=timeout)
         return [
-            {"name": d.name, "address": d.address, "rssi": d.rssi}
+            {"name": d.name, "address": d.address, "rssi": getattr(d, "rssi", None)}
             for d in devices
             if protocol.matches_device_name(d.name)
         ]
