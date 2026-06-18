@@ -77,6 +77,7 @@ async def status():
     cfg = config.load()
     return {
         "connected": ble.connected,
+        "reconnecting": not ble.connected and ble.address is not None,
         "address": ble.address,
         "last_color": cfg.get("last_color"),
         "last_brightness": cfg.get("last_brightness"),
@@ -103,6 +104,38 @@ async def brightness(req: BrightnessRequest):
     _require_connection()
     await ble.brightness(req.value)
     return {"brightness": req.value}
+
+
+class RawRequest(BaseModel):
+    hex: str  # ex: "7e 00 04 f0 00 01 ff 00 ef"
+
+@app.post("/send_raw")
+async def send_raw(req: RawRequest):
+    _require_connection()
+    data = bytes.fromhex(req.hex.replace(" ", ""))
+    await ble.send(data)
+    return {"sent": req.hex}
+
+
+@app.get("/inspect")
+async def inspect():
+    _require_connection()
+    result = []
+    for service in ble._client.services:
+        for ch in service.characteristics:
+            result.append({
+                "service": service.uuid,
+                "characteristic": ch.uuid,
+                "properties": ch.properties,
+                "description": ch.description,
+            })
+    return {"characteristics": result}
+
+
+@app.post("/disconnect")
+async def disconnect():
+    await ble.disconnect()
+    return {"status": "disconnected"}
 
 
 def _require_connection():

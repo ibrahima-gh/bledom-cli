@@ -73,15 +73,27 @@ class BLEConnection:
             await asyncio.sleep(RECONNECT_DELAY)
             if not self.connected and self._address:
                 logger.info("Attempting reconnection to %s", self._address)
-                await self._do_connect()
+                try:
+                    await self._do_connect()
+                except Exception as e:
+                    logger.warning("Reconnect attempt failed: %s", e)
 
     async def send(self, data: bytes) -> None:
         if not self.connected:
             raise RuntimeError("Not connected to any device")
+        logger.info("SEND → %s", data.hex(" "))
         await self._client.write_gatt_char(protocol.WRITE_UUID, data, response=False)
 
     async def power(self, on: bool) -> None:
-        await self.send(protocol.cmd_power(on))
+        cfg = config.load()
+        if on:
+            # Restore last brightness then last color
+            brightness = cfg.get("last_brightness") or 100
+            c = cfg.get("last_color") or {"r": 255, "g": 255, "b": 255}
+            await self.send(protocol.cmd_brightness(brightness))
+            await self.send(protocol.cmd_color(c["r"], c["g"], c["b"]))
+        else:
+            await self.send(protocol.cmd_brightness(0))
         config.set_value("last_power", on)
 
     async def color(self, r: int, g: int, b: int) -> None:
@@ -98,6 +110,8 @@ class BLEConnection:
         if self._client:
             await self._client.disconnect()
         self._connected = False
+        self._address = None
+        config.set_value("device_address", None)
 
 
 # Singleton used by the API layer
