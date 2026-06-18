@@ -91,6 +91,7 @@ class BLEConnection:
             brightness = cfg.get("last_brightness") or 100
             c = cfg.get("last_color") or {"r": 255, "g": 255, "b": 255}
             await self.send(protocol.cmd_brightness(brightness))
+            await asyncio.sleep(0.1)
             await self.send(protocol.cmd_color(c["r"], c["g"], c["b"]))
         else:
             await self.send(protocol.cmd_brightness(0))
