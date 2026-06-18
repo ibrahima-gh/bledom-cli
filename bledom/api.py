@@ -1,5 +1,7 @@
 """FastAPI routes. No OS-specific logic."""
 
+import logging
+import pathlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -10,9 +12,6 @@ from pydantic import BaseModel, Field
 from . import config
 from .connection import ble
 
-import logging
-import pathlib
-
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = pathlib.Path(__file__).parent.parent / "static"
@@ -20,7 +19,6 @@ STATIC_DIR = pathlib.Path(__file__).parent.parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Auto-connect to last known device on startup
     address = config.get("device_address")
     if address:
         logger.info("Auto-connecting to saved device %s", address)
@@ -32,8 +30,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="bledom-cli", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-
-# --- Request models ---
 
 class ConnectRequest(BaseModel):
     address: str
@@ -48,9 +44,6 @@ class ColorRequest(BaseModel):
 
 class BrightnessRequest(BaseModel):
     value: int = Field(..., ge=0, le=100)
-
-
-# --- Routes ---
 
 @app.get("/")
 async def index():

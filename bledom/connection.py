@@ -80,7 +80,7 @@ class BLEConnection:
     async def send(self, data: bytes) -> None:
         if not self.connected:
             raise RuntimeError("Not connected to any device")
-        logger.info("SEND → %s", data.hex(" "))
+        logger.debug("SEND → %s", data.hex(" "))
         await self._client.write_gatt_char(protocol.WRITE_UUID, data, response=False)
 
     async def power(self, on: bool) -> None:
