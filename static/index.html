@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="fr" class="bg-zinc-950">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BLEDOM Control</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { accent: "#4ade80" }
+        }
+      }
+    }
+  </script>
+  <style>
+    input[type="color"] { -webkit-appearance: none; appearance: none; border: none; padding: 0; cursor: pointer; }
+    input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    input[type="color"]::-webkit-color-swatch { border: none; border-radius: 12px; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: white; cursor: pointer; }
+  </style>
+</head>
+<body class="min-h-dvh text-zinc-100 flex flex-col items-center px-4 py-8 gap-4 font-sans">
+
+  <h1 class="text-xs font-semibold tracking-widest text-zinc-500 uppercase mt-2">BLEDOM Control</h1>
+
+  <!-- Status & Connexion -->
+  <div class="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
+    <span class="text-xs font-semibold tracking-widest text-zinc-500 uppercase">Connexion</span>
+
+    <div class="flex items-center gap-3">
+      <div id="dot" class="w-2.5 h-2.5 rounded-full bg-zinc-600 transition-colors duration-300"></div>
+      <span id="status-text" class="text-sm text-zinc-400">Vérification…</span>
+    </div>
+
+    <button onclick="startScan()" id="btn-scan"
+      class="w-full py-3 rounded-xl bg-zinc-800 text-zinc-100 text-sm font-medium active:bg-zinc-700 transition-colors">
+      Scanner les appareils
+    </button>
+
+    <div id="scan-result" class="hidden flex flex-col gap-3">
+      <select id="device-select"
+        class="w-full px-3 py-3 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm">
+      </select>
+      <button onclick="connectDevice()"
+        class="w-full py-3 rounded-xl bg-white text-black text-sm font-semibold active:bg-zinc-200 transition-colors">
+        Connecter
+      </button>
+    </div>
+  </div>
+
+  <!-- Power -->
+  <div class="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-3">
+    <span class="text-xs font-semibold tracking-widest text-zinc-500 uppercase">Alimentation</span>
+    <div class="flex items-center justify-between">
+      <span class="text-sm">LED</span>
+      <label class="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" id="power-toggle" class="sr-only peer" onchange="setPower(this.checked)" />
+        <div class="w-12 h-6 bg-zinc-700 rounded-full peer
+          peer-checked:bg-accent
+          after:content-[''] after:absolute after:top-0.5 after:left-0.5
+          after:bg-white after:rounded-full after:h-5 after:w-5
+          after:transition-all peer-checked:after:translate-x-6">
+        </div>
+      </label>
+    </div>
+  </div>
+
+  <!-- Couleur -->
+  <div class="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
+    <span class="text-xs font-semibold tracking-widest text-zinc-500 uppercase">Couleur</span>
+    <div id="color-preview" class="w-full h-20 rounded-xl border border-zinc-800 transition-colors duration-200" style="background:#ffffff"></div>
+    <input type="color" id="color-picker" value="#ffffff"
+      class="w-full h-12 rounded-xl"
+      oninput="onColorInput(this.value)"
+      onchange="sendColor(this.value)" />
+  </div>
+
+  <!-- Luminosité -->
+  <div class="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-3">
+    <span class="text-xs font-semibold tracking-widest text-zinc-500 uppercase">Luminosité</span>
+    <div class="flex items-center gap-3">
+      <input type="range" id="brightness" min="0" max="100" value="100"
+        class="flex-1 h-1.5 rounded-full bg-zinc-700 appearance-none outline-none"
+        oninput="document.getElementById('brightness-val').textContent = this.value + '%'"
+        onchange="sendBrightness(this.value)" />
+      <span id="brightness-val" class="text-sm text-zinc-400 w-10 text-right">100%</span>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast"
+    class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-zinc-800 text-white text-sm px-5 py-2.5 rounded-full opacity-0 transition-opacity duration-300 pointer-events-none whitespace-nowrap">
+  </div>
+
+  <script>
+    async function api(method, path, body) {
+      const opts = { method, headers: { "Content-Type": "application/json" } };
+      if (body !== undefined) opts.body = JSON.stringify(body);
+      const res = await fetch(path, opts);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    }
+
+    function toast(msg, duration = 2500) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.remove("opacity-0");
+      el.classList.add("opacity-100");
+      setTimeout(() => { el.classList.remove("opacity-100"); el.classList.add("opacity-0"); }, duration);
+    }
+
+    async function refreshStatus() {
+      try {
+        const s = await api("GET", "/status");
+        document.getElementById("dot").className =
+          "w-2.5 h-2.5 rounded-full transition-colors duration-300 " +
+          (s.connected ? "bg-accent" : "bg-zinc-600");
+        document.getElementById("status-text").textContent = s.connected
+          ? "Connecté · " + s.address : "Déconnecté";
+        if (s.last_color) {
+          const hex = rgbToHex(s.last_color.r, s.last_color.g, s.last_color.b);
+          document.getElementById("color-picker").value = hex;
+          document.getElementById("color-preview").style.background = hex;
+        }
+        if (s.last_brightness != null) {
+          document.getElementById("brightness").value = s.last_brightness;
+          document.getElementById("brightness-val").textContent = s.last_brightness + "%";
+        }
+        if (s.last_power != null) {
+          document.getElementById("power-toggle").checked = s.last_power;
+        }
+      } catch {
+        document.getElementById("status-text").textContent = "Erreur serveur";
+      }
+    }
+
+    async function startScan() {
+      const btn = document.getElementById("btn-scan");
+      btn.textContent = "Scan en cours…";
+      btn.disabled = true;
+      try {
+        const data = await api("GET", "/scan?timeout=6");
+        const sel = document.getElementById("device-select");
+        sel.innerHTML = "";
+        if (!data.devices.length) { toast("Aucun appareil trouvé"); return; }
+        data.devices.forEach(d => {
+          const opt = document.createElement("option");
+          opt.value = d.address;
+          opt.textContent = (d.name || "?") + " · " + d.address;
+          sel.appendChild(opt);
+        });
+        document.getElementById("scan-result").classList.remove("hidden");
+      } catch (e) {
+        toast("Erreur scan : " + e.message);
+      } finally {
+        btn.textContent = "Scanner les appareils";
+        btn.disabled = false;
+      }
+    }
+
+    async function connectDevice() {
+      const address = document.getElementById("device-select").value;
+      try {
+        await api("POST", "/connect", { address });
+        toast("Connecté !");
+        document.getElementById("scan-result").classList.add("hidden");
+        refreshStatus();
+      } catch { toast("Échec connexion"); }
+    }
+
+    async function setPower(on) {
+      try { await api("POST", "/power", { on }); }
+      catch (e) { toast("Erreur : " + e.message); }
+    }
+
+    function onColorInput(hex) {
+      document.getElementById("color-preview").style.background = hex;
+    }
+
+    async function sendColor(hex) {
+      const { r, g, b } = hexToRgb(hex);
+      try { await api("POST", "/color", { r, g, b }); }
+      catch { toast("Erreur couleur"); }
+    }
+
+    async function sendBrightness(value) {
+      try { await api("POST", "/brightness", { value: parseInt(value) }); }
+      catch { toast("Erreur luminosité"); }
+    }
+
+    function hexToRgb(hex) {
+      const n = parseInt(hex.slice(1), 16);
+      return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+    }
+
+    function rgbToHex(r, g, b) {
+      return "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join("");
+    }
+
+    refreshStatus();
+    setInterval(refreshStatus, 5000);
+  </script>
+</body>
+</html>
