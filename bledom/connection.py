@@ -5,7 +5,6 @@ import logging
 from typing import Optional
 
 from bleak import BleakClient, BleakScanner
-from bleak.backends.device import BLEDevice
 
 from . import protocol, config
 

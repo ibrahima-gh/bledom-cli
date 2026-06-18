@@ -11,6 +11,7 @@ fi
 source "$VENV/bin/activate"
 
 echo "Installing/updating dependencies…"
+pip install -q --upgrade pip
 pip install -q -r requirements.txt
 
 echo "Starting bledom-cli on http://0.0.0.0:8000"
